@@ -1,0 +1,225 @@
+jQuery(function($) {
+    const injectFanLogo = () => {
+        const logoUrl = 'https://www.selfawb.ro/new/images/logo-small.png';
+        const logoHtml = `<img src="${logoUrl}" alt="FAN" class="fan-shipping-logo" style="height: 20px; width: auto; vertical-align: middle; margin-right: 8px; display: inline-block !important; border:none; box-shadow:none;" />`;
+        
+        const allowedIds = window.fanLogoWhitelist || [];
+
+        $('input[type="radio"][value*="fan_courier"]').each(function() {
+            const $input = $(this);
+            const val = $input.val();
+            
+            let serviceId = null;
+            const matches = val.match(/(\d+)/); 
+            if (matches) {
+                serviceId = parseInt(matches[0]);
+            }
+
+            let shouldShow = false;
+            
+            if (serviceId && allowedIds.includes(serviceId)) {
+                shouldShow = true;
+            } else if (val.toLowerCase().indexOf('fanbox') !== -1) {
+                if (allowedIds.includes(27) || allowedIds.includes(28)) {
+                    shouldShow = true;
+                }
+            }
+
+            if (!shouldShow) return;
+
+            let $label;
+            if ($input.attr('id')) {
+                $label = $('label[for="' + $input.attr('id') + '"]');
+            }
+            if (!$label || $label.length === 0) $label = $input.closest('label');
+            if (!$label || $label.length === 0) $label = $input.closest('.wc-block-components-radio-control').find('label');
+            if (!$label || $label.length === 0) $label = $input.next('label');
+
+            if ($label.length > 0) {
+                const textSpan = $label.find('.wc-block-components-radio-control__label');
+                if (textSpan.length > 0) {
+                    if (textSpan.find('.fan-shipping-logo').length === 0) {
+                        textSpan.prepend(logoHtml);
+                    }
+                } 
+                else {
+                    if ($label.find('img.fan-shipping-logo').length === 0 && $label.find('img').length === 0) {
+                        $label.prepend(logoHtml);
+                    }
+                }
+            }
+        });
+    };
+
+    let debounceTimer;
+    const runInjectWithDebounce = () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(injectFanLogo, 100);
+    };
+
+    injectFanLogo();
+
+    const observer = new MutationObserver(function() { runInjectWithDebounce(); });
+    
+    const targetNode = document.querySelector('.woocommerce') || document.querySelector('.wc-block-checkout') || document.body;
+    observer.observe(targetNode, { childList: true, subtree: true });
+
+    const set_cookie = (key, value, days) => {
+        let d = new Date();
+        d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+        let expires = "expires=" + d.toUTCString();
+        document.cookie = key + "=" + encodeURIComponent(value) + ";" + expires + ";path=/";
+    };
+
+    const get_cookie = (key) => {
+        let cookie = '';
+        document.cookie.split(';').forEach(function(value) {
+            if (value.split('=')[0].trim() === key) {
+                cookie = value.split('=')[1];
+            }
+        });
+        return decodeURIComponent(cookie);
+    };
+
+    function createMapButton(targetElement) {
+        if (targetElement.find('.locker-pickup').length > 0) return;
+
+        const mapIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align:text-bottom;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`;
+        
+        const html = `
+            <div class="locker-pickup" style="margin-left: 28px; margin-top: 6px; padding: 0; width: 100%;">
+                <div style="display:flex; align-items:center; flex-wrap:wrap; gap: 8px;">
+                    <a href="#" id="FANopenMap" style="
+                        display: inline-flex; 
+                        align-items: center; 
+                        text-decoration: none; 
+                        font-weight: 500; 
+                        font-size: 14px; 
+                        color: #0073aa; 
+                        border: 1px solid #0073aa; 
+                        padding: 5px 12px; 
+                        border-radius: 4px; 
+                        background: transparent; 
+                        transition: all 0.2s;">
+                        ${mapIcon} Selectează punct ridicare
+                    </a>
+                    <span id="FANshowLockerDetails" style="font-weight: 600; font-size: 13px; color: #2c3338; line-height: 1.4;"></span>
+                </div>
+            </div>`;
+
+        targetElement.append(html);
+        
+        $('#FANopenMap').hover(
+            function() { $(this).css({'background-color': '#f0f6fc', 'text-decoration': 'none'}); }, 
+            function() { $(this).css({'background-color': 'transparent'}); }
+        );
+
+        if (get_cookie('fancourier_locker_name')) {
+            const name = get_cookie('fancourier_locker_name');
+            $("#FANshowLockerDetails").html('<span style="color:#28a745; margin-right:4px;">✔</span> ' + name);
+            $("#FANopenMap").html(`${mapIcon} Schimbă punctul`);
+        }
+
+        $("#FANopenMap").on("click", (e) => {
+            e.preventDefault();
+            
+            $('#FANmapDiv').remove();
+            $('body').append('<div id="FANmapDiv"></div>');
+            
+            const rootNode = document.getElementById("FANmapDiv");
+
+            function normalizeString(str) {
+                if (!str) return '';
+                return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            }
+
+            function findValue(selectors) {
+                for (const selector of selectors) {
+                    const $element = $(selector);
+                    if ($element.length > 0 && $element.val()) {
+                        const value = $element.is('select') ? $element.find('option:selected').text() : $element.val();
+                        if (value) return value.trim();
+                    }
+                }
+                return '';
+            }
+
+            const prefix = 'shipping';
+            const countySelectors = [`#${prefix}-state`, `select[name="${prefix}_state"]`];
+            const localitySelectors = [`#${prefix}-city-fan-select`, `#${prefix}-city`, `input[name="${prefix}_city"]`];
+            const rawCounty = findValue(countySelectors);
+            const rawLocality = findValue(localitySelectors);
+
+            if (window.LoadMapFanBox) {
+                setTimeout(() => {
+                    window.LoadMapFanBox({
+                        rootNode,
+                        county: normalizeString(rawCounty),
+                        locality: normalizeString(rawLocality)
+                    });
+                }, 50);
+            } else {
+                 $("#FANshowLockerDetails").html('<span style="color:red">Eroare încărcare hartă. Reîncărcați pagina.</span>');
+            }
+        });
+    }
+
+    function handleShippingChange() {
+        runInjectWithDebounce();
+
+        const fanInput = $('input[name^="shipping_method"]:checked, input[type="radio"].wc-block-components-radio-control__input:checked')
+            .filter(function() {
+                return $(this).val().indexOf('fan_courier') !== -1;
+            });
+
+        $('.locker-pickup').remove();
+
+        if (fanInput.length === 0) {
+            return;
+        }
+
+        const val = fanInput.val();
+        const isFanbox = (val.indexOf('@27') !== -1 || val.indexOf('@28') !== -1 || val.toLowerCase().indexOf('fanbox') !== -1);
+
+        if (isFanbox) {
+            let parent = fanInput.closest('li'); 
+            if (parent.length === 0) parent = fanInput.closest('.wc-block-components-radio-control__option');
+            if (parent.length === 0) parent = fanInput.parent().parent();
+
+            createMapButton(parent);
+        } else {
+            set_cookie('fancourier_locker_id', '', -1);
+            set_cookie('fancourier_locker_name', '', -1);
+            set_cookie('fancourier_locker_county', '', -1);
+            set_cookie('fancourier_locker_locality', '', -1);
+        }
+    }
+
+    $(document).on('change', 'input[name^="shipping_method"], input[type="radio"].wc-block-components-radio-control__input', handleShippingChange);
+    $(document.body).on('updated_checkout', handleShippingChange);
+
+    setTimeout(handleShippingChange, 500);
+
+    window.addEventListener("map:select-point", event => {
+        const item = event.detail.item;
+        if (!item) return;
+
+        set_cookie('fancourier_locker_id', item.id, 1);
+        set_cookie('fancourier_locker_name', item.name, 1);
+        
+        const county = item.county || (item.address ? item.address.split(',')[0] : '').trim();
+        const locality = item.locality || (item.address ? item.address.split(',')[1] : '').trim();
+
+        set_cookie('fancourier_locker_county', county, 1);
+        set_cookie('fancourier_locker_locality', locality, 1);
+
+        if (document.getElementById("FANshowLockerDetails")) {
+            const mapIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align:text-bottom;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`;
+            
+            $("#FANshowLockerDetails").html('<span style="color:#28a745; margin-right:4px;">✔</span> ' + item.name);
+            $("#FANopenMap").html(`${mapIcon} Schimbă punctul`);
+        }
+        
+        $('#FANmapDiv').remove();
+    });
+});

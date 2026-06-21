@@ -1,0 +1,51 @@
+jQuery(function($) {
+    function getLocationFromComponent(locationDetails) {
+        document.getElementById("showLockerDetails").innerHTML = locationDetails.locationName;
+
+        const cookie_locker_name = 'fancourier_locker_name';
+        const cookie_locker_address = 'fancourier_locker_address';
+
+        set_cookie(cookie_locker_name, locationDetails.locationName, 30);
+        set_cookie(cookie_locker_address, locationDetails.countyName + '|' + locationDetails.localityName, 30);
+        return locationDetails;
+    }
+
+    function loadMap() {
+        window.setFlagModal && window.setFlagModal(true);
+        window.LoadMap(getLocationFromComponent, '');
+    }
+
+    const set_cookie = (key, value, days) => {
+        let d = new Date();
+        d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+        let expires = "expires=" + d.toUTCString();
+
+        document.cookie = key + "=" + value + ";" + expires + ";path=/";
+    }
+
+    const get_cookie = (key) => {
+        let cookie = '';
+        document.cookie.split(';').forEach(function (value) {
+            if (value.split('=')[0].trim() === key) {
+                return cookie = value.split('=')[1];
+            }
+        });
+
+        return cookie;
+    }
+
+    const delete_cookie = (key, value, days) => {
+        let d = new Date();
+        d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+        let expires = "expires=" + 'Thu, 01 Jan 2022 00:00:01 GMT';
+
+        document.cookie = key + "=" + value + ";" + expires + ";path=/";
+    }
+
+    $(document).on('change','input[name=radio-control-wc-payment-method-options]',function(){
+        setTimeout(function(){
+            $(document.body).trigger('update_checkout');
+
+        }, 250 );
+    });
+})
